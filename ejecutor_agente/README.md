@@ -21,7 +21,7 @@ Motor de decisión autónomo que:
 
 ### 2. Action System (`action_system.py`)
 Sistema de acciones desacoplado que implementa:
-- **SendAlertAction**: Envío de alertas
+- **SendAlertAction**: Envío de alertas por correo electrónico (SMTP)
 - **CreateTicketAction**: Creación de tickets
 - **ExecuteScriptAction**: Ejecución de scripts de remediación
 - **LogEventAction**: Registro de eventos
@@ -36,7 +36,15 @@ Herramientas MCP que exponen la funcionalidad:
 - `get_available_actions()`: Lista acciones disponibles
 - `get_decision_thresholds()`: Muestra umbrales configurados
 
-### 4. MCP Server (`mcp_server.py`)
+### 4. Email Service (`email_service.py`)
+Servicio de correo electrónico reutilizable que:
+- Soporta envío SMTP SSL/TLS (Gmail compatible)
+- Lee credenciales desde variables de entorno
+- Genera correos HTML profesionales con detalles del evento
+- Maneja errores de SMTP gracefully
+- Soporta múltiples destinatarios configurables
+
+### 5. MCP Server (`mcp_server.py`)
 Servidor MCP que expone las herramientas al agente ADK.
 
 ## Estructura de Eventos
@@ -149,6 +157,16 @@ El executor_agent siempre devuelve respuestas con esta estructura:
 - `A2A_HOST`: Host para agente A2A (default: localhost)
 - `A2A_PORT_ASSISTANT`: Puerto para agente A2A (default: 10002)
 
+#### Configuración de Correo Electrónico
+- `ALERT_EMAIL_FROM`: Email remitente (requerido)
+- `ALERT_EMAIL_PASSWORD`: Contraseña de aplicación (requerido)
+- `ALERT_EMAIL_RECIPIENTS`: Lista de destinatarios separados por coma
+- `ALERT_SMTP_SERVER`: Servidor SMTP (default: smtp.gmail.com)
+- `ALERT_SMTP_PORT`: Puerto SMTP (default: 587)
+- `ALERT_USE_TLS`: Usar TLS (default: true)
+
+**Nota para Gmail**: Usar "Contraseña de aplicación" en lugar de contraseña normal.
+
 ### Umbrales Configurables
 Se pueden modificar en `decision_engine.py`:
 - `IMMEDIATE_THRESHOLD`: Umbral para ejecución inmediata (default: 80.0)
@@ -157,11 +175,16 @@ Se pueden modificar en `decision_engine.py`:
 
 ## Pruebas
 
-Ejecutar el suite de pruebas completo:
-
+### Suite de Pruebas Principal
 ```bash
 cd ejecutor_agente
 python test_executor.py
+```
+
+### Pruebas de Correo Electrónico
+```bash
+cd ejecutor_agente
+python test_email.py
 ```
 
 Las pruebas validan:
@@ -170,6 +193,8 @@ Las pruebas validan:
 - Integración completa del flujo
 - Historial de decisiones
 - Cálculo de riesgo con desglose
+- Configuración y envío de correos electrónicos
+- Manejo de errores de SMTP
 
 ## Integración A2A
 
@@ -189,6 +214,8 @@ El executor_agent mantiene la compatibilidad con la arquitectura A2A existente:
 ✅ **Escalabilidad**: Arquitectura modular para fácil extensión  
 ✅ **Seguridad**: Manejo de baja confianza con revisión humana  
 ✅ **Auditabilidad**: Historial completo para cumplimiento  
+✅ **Alertas por Email**: Notificaciones automáticas con detalles completos  
+✅ **Robustez**: Manejo graceful de errores de SMTP y configuración  
 
 ## Uso en Demostraciones
 
@@ -197,5 +224,6 @@ El executor_agent está diseñado para ser fácil de demostrar:
 1. **Eventos Simples**: Probar con diferentes tipos de eventos
 2. **Decisiones Explicables**: Cada decisión incluye razonamiento claro
 3. **Acciones Visibles**: Las acciones se registran con resultados detallados
-4. **Configuración Dinámica**: Los umbrales pueden ajustarse en tiempo real
-5. **Historial Completo**: Se puede consultar el historial de decisiones recientes
+4. **Alertas en Tiempo Real**: Correos electrónicos con formato profesional
+5. **Configuración Dinámica**: Los umbrales pueden ajustarse en tiempo real
+6. **Historial Completo**: Se puede consultar el historial de decisiones recientes
