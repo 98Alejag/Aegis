@@ -6,6 +6,8 @@ Valida el funcionamiento del motor de decisión y sistema de acciones.
 import json
 import time
 import asyncio
+import os
+from dotenv import load_dotenv
 from decision_engine import DecisionEngine, Event, Severity, BusinessImpact
 from action_system import ActionExecutor
 from executor_tools import initialize_tools, process_event, get_decision_history, calculate_risk_score
@@ -279,6 +281,9 @@ def test_risk_calculation():
 
 def main():
     """Ejecutar todas las pruebas."""
+    # Load environment variables from .env file
+    load_dotenv()
+    
     print("Executor Agent Test Suite")
     print("=" * 50)
     

@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from email_service import EmailService, EmailResult
 
 logger = logging.getLogger(__name__)
 
@@ -64,47 +65,111 @@ class Action(ABC):
         return True
 
 class SendAlertAction(Action):
-    """Acción para enviar alertas."""
+    """Acción para enviar alertas por correo electrónico."""
     
     def __init__(self):
         super().__init__("send_alert")
+        self.email_service = None
+        
+    def _get_email_service(self):
+        """Obtener instancia del servicio de correo (lazy initialization)."""
+        if self.email_service is None:
+            try:
+                self.email_service = EmailService()
+                self.logger.info("Email service initialized successfully")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize email service: {str(e)}")
+                self.email_service = None
+        return self.email_service
+    
+    def _get_recipients(self, context: Dict[str, Any]) -> List[str]:
+        """Obtener lista de destinatarios desde contexto o variables de entorno."""
+        # Intentar obtener desde contexto primero
+        if "recipients" in context:
+            return context["recipients"]
+        
+        # Obtener desde variables de entorno
+        import os
+        recipients_str = os.getenv("ALERT_EMAIL_RECIPIENTS", "")
+        if recipients_str:
+            return [email.strip() for email in recipients_str.split(",") if email.strip()]
+        
+        # Valor por defecto para pruebas
+        return ["admin@example.com"]
     
     def execute(self, context: Dict[str, Any]) -> ActionExecution:
-        """Enviar alerta basada en el evento."""
+        """Enviar alerta por correo electrónico basada en el evento."""
         try:
             event = context.get("event", {})
             decision = context.get("decision", {})
             score = context.get("score", 0)
+            actions_executed = context.get("actions_executed", [])
+            reasoning = context.get("reasoning", "")
             
-            # Simular envío de alerta
-            alert_data = {
-                "alert_type": "SYSTEM_ALERT",
-                "event_type": event.get("event_type", "UNKNOWN"),
-                "resource": event.get("resource", "UNKNOWN"),
-                "severity": event.get("severity", "UNKNOWN"),
+            # Preparar datos para el correo
+            decision_data = {
                 "decision": decision.value if hasattr(decision, 'value') else str(decision),
-                "risk_score": score,
-                "timestamp": time.time(),
-                "message": f"Alert: {event.get('event_type')} detected on {event.get('resource')}"
+                "score": score,
+                "actions_executed": actions_executed,
+                "reasoning": reasoning
             }
             
-            # Simular llamada a sistema de alertas
-            self.logger.info(f"🚨 ALERT SENT: {json.dumps(alert_data, indent=2)}")
+            # Obtener servicio de correo
+            email_service = self._get_email_service()
+            if not email_service:
+                return ActionExecution(
+                    action_name=self.name,
+                    result=ActionResult.FAILURE,
+                    message="Email service not available - check configuration",
+                    timestamp=time.time(),
+                    details={"error": "Email service initialization failed"}
+                )
             
-            return ActionExecution(
-                action_name=self.name,
-                result=ActionResult.SUCCESS,
-                message=f"Alert sent for {event.get('event_type')} on {event.get('resource')}",
-                timestamp=time.time(),
-                details={"alert_data": alert_data}
-            )
+            # Obtener destinatarios
+            recipients = self._get_recipients(context)
+            if not recipients:
+                return ActionExecution(
+                    action_name=self.name,
+                    result=ActionResult.FAILURE,
+                    message="No email recipients configured",
+                    timestamp=time.time(),
+                    details={"error": "Empty recipient list"}
+                )
             
+            # Enviar correo
+            email_result = email_service.send_alert(recipients, event, decision_data)
+            
+            if email_result.success:
+                self.logger.info(f"� EMAIL SENT: Alert for {event.get('event_type')} sent to {len(recipients)} recipients")
+                return ActionExecution(
+                    action_name=self.name,
+                    result=ActionResult.SUCCESS,
+                    message=f"Alert email sent to {len(recipients)} recipients",
+                    timestamp=time.time(),
+                    details={
+                        "recipients": email_result.recipients,
+                        "email_result": "EMAIL_SENT"
+                    }
+                )
+            else:
+                self.logger.error(f"📧 EMAIL FAILED: {email_result.message}")
+                return ActionExecution(
+                    action_name=self.name,
+                    result=ActionResult.FAILURE,
+                    message=f"Email sending failed: {email_result.message}",
+                    timestamp=time.time(),
+                    details={
+                        "error": email_result.error_details,
+                        "recipients": recipients
+                    }
+                )
+                
         except Exception as e:
-            self.logger.error(f"Failed to send alert: {str(e)}")
+            self.logger.error(f"Unexpected error in send_alert: {str(e)}")
             return ActionExecution(
                 action_name=self.name,
                 result=ActionResult.FAILURE,
-                message=f"Alert failed: {str(e)}",
+                message=f"Unexpected error: {str(e)}",
                 timestamp=time.time()
             )
 
